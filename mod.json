@@ -1,0 +1,13 @@
+{
+	"geode": "5.11.2",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081"
+	},
+	"version": "v1.0.0",
+	"id": "startpos_finder",
+	"name": "StartPos Finder",
+	"developer": "scriptmanage",
+	"description": "Find practice and startpos copies directly from LevelInfoLayer."
+}
