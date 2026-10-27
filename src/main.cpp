@@ -1,8 +1,13 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/LevelInfoLayer.hpp>
+#include <Geode/modify/LevelBrowserLayer.hpp>
 #include <Geode/ui/BasedButtonSprite.hpp>
 
 using namespace geode::prelude;
+
+// Храним ID уровня, из которого перешли в поиск StartPos
+static int s_targetOriginalLevelID = 0;
+static bool s_isFilteringStartPos = false;
 
 class $modify(MyLevelInfoLayer, LevelInfoLayer) {
     bool init(GJGameLevel* level, bool challenge) {
@@ -53,6 +58,10 @@ class $modify(MyLevelInfoLayer, LevelInfoLayer) {
             return;
         }
 
+        // Запоминаем целевой ID для верификации оригинальности копий
+        s_targetOriginalLevelID = m_level->m_levelID.value();
+        s_isFilteringStartPos = true;
+
         std::string levelName = m_level->m_levelName;
         std::string target = levelName + " startpos";
         std::string query;
@@ -69,5 +78,37 @@ class $modify(MyLevelInfoLayer, LevelInfoLayer) {
         auto searchObj = GJSearchObject::create(SearchType::Search, query);
         auto scene = LevelBrowserLayer::scene(searchObj);
         CCDirector::sharedDirector()->pushScene(CCTransitionFade::create(0.5f, scene));
+    }
+};
+
+class $modify(MyLevelBrowserLayer, LevelBrowserLayer) {
+    void setupLevelBrowser(cocos2d::CCArray* levels) {
+        // Если поиск вызван нашей кнопкой и задан ID исходного уровня
+        if (s_isFilteringStartPos && s_targetOriginalLevelID > 0 && levels) {
+            auto filtered = cocos2d::CCArray::create();
+
+            for (auto obj : CCArrayExt<GJGameLevel*>(levels)) {
+                if (!obj) continue;
+
+                // Проверяем, что уровень является подлинной копией:
+                // m_originalLevel содержит ID уровня, с которого снята копия
+                if (obj->m_originalLevel.value() == s_targetOriginalLevelID) {
+                    filtered->addObject(obj);
+                }
+            }
+
+            // Передаем в оригинальный метод только отфильтрованные уровни
+            LevelBrowserLayer::setupLevelBrowser(filtered);
+            return;
+        }
+
+        LevelBrowserLayer::setupLevelBrowser(levels);
+    }
+
+    void destructor() {
+        // При выходе из браузера сбрасываем флаг фильтрации
+        s_isFilteringStartPos = false;
+        s_targetOriginalLevelID = 0;
+        LevelBrowserLayer::~LevelBrowserLayer();
     }
 };
