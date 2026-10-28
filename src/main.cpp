@@ -1,11 +1,11 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/LevelInfoLayer.hpp>
 #include <Geode/modify/LevelBrowserLayer.hpp>
+#include <Geode/modify/LevelCell.hpp>
 #include <Geode/ui/BasedButtonSprite.hpp>
 
 using namespace geode::prelude;
 
-// Храним ID уровня, из которого перешли в поиск StartPos
 static int s_targetOriginalLevelID = 0;
 static bool s_isFilteringStartPos = false;
 
@@ -58,7 +58,6 @@ class $modify(MyLevelInfoLayer, LevelInfoLayer) {
             return;
         }
 
-        // Запоминаем целевой ID для верификации оригинальности копий
         s_targetOriginalLevelID = m_level->m_levelID.value();
         s_isFilteringStartPos = true;
 
@@ -83,22 +82,29 @@ class $modify(MyLevelInfoLayer, LevelInfoLayer) {
 
 class $modify(MyLevelBrowserLayer, LevelBrowserLayer) {
     void setupLevelBrowser(cocos2d::CCArray* levels) {
-        // Если поиск вызван нашей кнопкой и задан ID исходного уровня
         if (s_isFilteringStartPos && s_targetOriginalLevelID > 0 && levels) {
-            auto filtered = cocos2d::CCArray::create();
+            auto verifiedLevels = cocos2d::CCArray::create();
+            auto otherLevels = cocos2d::CCArray::create();
 
             for (auto obj : CCArrayExt<GJGameLevel*>(levels)) {
                 if (!obj) continue;
 
-                // Проверяем, что уровень является подлинной копией:
-                // m_originalLevel содержит ID уровня, с которого снята копия
                 if (obj->m_originalLevel.value() == s_targetOriginalLevelID) {
-                    filtered->addObject(obj);
+                    verifiedLevels->addObject(obj);
+                } else {
+                    otherLevels->addObject(obj);
                 }
             }
 
-            // Передаем в оригинальный метод только отфильтрованные уровни
-            LevelBrowserLayer::setupLevelBrowser(filtered);
+            auto sortedLevels = cocos2d::CCArray::create();
+            for (auto obj : CCArrayExt<GJGameLevel*>(verifiedLevels)) {
+                sortedLevels->addObject(obj);
+            }
+            for (auto obj : CCArrayExt<GJGameLevel*>(otherLevels)) {
+                sortedLevels->addObject(obj);
+            }
+
+            LevelBrowserLayer::setupLevelBrowser(sortedLevels);
             return;
         }
 
@@ -106,9 +112,71 @@ class $modify(MyLevelBrowserLayer, LevelBrowserLayer) {
     }
 
     void destructor() {
-        // При выходе из браузера сбрасываем флаг фильтрации
         s_isFilteringStartPos = false;
         s_targetOriginalLevelID = 0;
         LevelBrowserLayer::~LevelBrowserLayer();
+    }
+};
+
+class $modify(MyLevelCell, LevelCell) {
+    void loadFromLevel(GJGameLevel* level) {
+        LevelCell::loadFromLevel(level);
+
+        if (!s_isFilteringStartPos || s_targetOriginalLevelID <= 0 || !level || !m_mainLayer) {
+            return;
+        }
+
+        if (level->m_originalLevel.value() == s_targetOriginalLevelID) {
+            if (auto existingBadge = m_mainLayer->getChildByID("verified-copy-badge"_spr)) {
+                existingBadge->removeFromParent();
+            }
+
+            CCSprite* badge = CCSprite::create("startpos_verified.png"_spr);
+            if (!badge) {
+                badge = CCSprite::createWithSpriteFrameName("GJ_checkOn_001.png");
+            }
+
+            if (!badge) {
+                return;
+            }
+
+            badge->setID("verified-copy-badge"_spr);
+            badge->setScale(0.35f);
+
+            CCNode* titleNode = m_mainLayer->getChildByID("level-name-label");
+            if (!titleNode) {
+                titleNode = m_mainLayer->getChildByID("level-name");
+            }
+            if (!titleNode) {
+                for (auto child : CCArrayExt<CCNode*>(m_mainLayer->getChildren())) {
+                    if (auto bmFont = typeinfo_cast<CCLabelBMFont*>(child)) {
+                        if (bmFont->getPositionY() > 60.f && bmFont->getPositionX() < 100.f) {
+                            titleNode = bmFont;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (titleNode) {
+                float titleRight = titleNode->getPositionX() + (titleNode->getContentSize().width * titleNode->getScale());
+                float titleY = titleNode->getPositionY();
+
+                if (titleRight + 16.f < 275.f) {
+                    badge->setPosition(ccp(titleRight + 10.f, titleY));
+                } else {
+                    if (auto creatorNode = m_mainLayer->getChildByID("creator-name")) {
+                        float creatorRight = creatorNode->getPositionX() + (creatorNode->getContentSize().width * creatorNode->getScale());
+                        badge->setPosition(ccp(creatorRight + 10.f, creatorNode->getPositionY()));
+                    } else {
+                        badge->setPosition(ccp(38.f, 62.f));
+                    }
+                }
+            } else {
+                badge->setPosition(ccp(38.f, 62.f));
+            }
+
+            m_mainLayer->addChild(badge, 15);
+        }
     }
 };

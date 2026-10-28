@@ -5,9 +5,14 @@
 		"android": "2.2081",
 		"mac": "2.2081"
 	},
-	"version": "v1.0.0",
+	"version": "v1.1.0",
 	"id": "startpos_finder",
 	"name": "StartPos Finder",
 	"developer": "scriptmanage",
-	"description": "Find practice and startpos copies directly from LevelInfoLayer."
+	"description": "Find practice and startpos copies directly from LevelInfoLayer.",
+	"resources": {
+		"sprites": [
+			"resources/*.png"
+		]
+	}
 }

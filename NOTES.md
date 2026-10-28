@@ -1,46 +1,12 @@
-# Project History & Roadmap: StartPos Finder
+# StartPos Finder
 
-## 1. О проекте (Для чего создавался)
-**StartPos Finder** — это модификация для Geometry Dash на базе Geode SDK (версия GD 2.2081, Geode v5.11.2+).
-Цель мода — ускорить поиск тренировочных уровней (копий уровней с установленными StartPos для тренировки сложных прогонов) прямо из экрана уровня (`LevelInfoLayer`), избавив игрока от необходимости вручную вбивать название уровня в поисковую строку.
+- Geometry Dash v2.2081
+- Geode SDK v5.11.2+
+- GitHub: https://github.com/scriptmanage/StartPosFinder
 
----
+## Features
 
-## 2. Что было сделано (Хронология разработки)
-
-1. **Базовая архитектура проекта**:
-   - Создана структура Geode-мода (`mod.json`, `CMakeLists.txt`, `src/main.cpp`).
-   - Написан хук на `LevelInfoLayer::init` с внедрением кнопки в боковое меню `left-side-menu`.
-
-2. **Настройка CI/CD сборки через GitHub Actions**:
-   - Создан workflow `.github/workflows/build.yml` с мультиплатформенной компиляцией под Windows (x64), Android (arm32, arm64) и macOS.
-   - Сконфигурирован автоматический шаг склеивания бинарников в единый универсальный файл `.geode`.
-
-3. **Решение проблем совместимости версий**:
-   - Geode SDK обновлён до стабильной версии `5.11.2`.
-   - В `mod.json` зафиксирована актуальная версия Geometry Dash `2.2081`.
-
-4. **Интерфейс и дизайн**:
-   - Заменена временная текстура кнопки на нативную 3D-кнопку Geometry Dash: `CircleButtonSprite` с зелёной подложкой (`CircleBaseColor::Green`) и иконкой поиска `gj_findBtn_001.png`.
-   - Кнопка органично встроена рядом со стандартными кнопками меню (комментарии, списки лидеров).
-
-5. **Оптимизация поискового алгоритма (Обход лимитов GD)**:
-   - Выяснено опытным путём через API серверов RobTop (`getGJLevels21.php`), что сервер имеет лимит поисковой строки ровно в **20 символов**. Запросы длиннее (например, `Slaughterhouse startpos` = 23 символа) сервер отклоняет с ошибкой `-1`.
-   - Реализована авто-подгонка запроса: если `{ИмяУровня} startpos` превышает 20 символов, запрос автоматически усекается ровно до 20 символов (например, `Slaughterhouse start`), что моментально находит все нужные копии без ошибок.
-
-6. **Очистка репозитория и релиз**:
-   - Создан чистый публичный репозиторий: `scriptmanage/StartPosFinder`.
-   - Удалены все упоминания нейросетей, лишние комментарии и персональные данные (пути ОС, токены, логи).
-   - Опубликован официальный релиз `v1.0.0` с прикреплённым бинарником `startpos_finder.geode`.
-   - Мод установлен и проверен на рабочей машине в директории `~/.local/share/Steam/steamapps/common/Geometry Dash/geode/mods/`.
-
-7. **Верификация оригинальности копий (Anti-Nerf / Original Check)**:
-   - Внедрена строгая проверка `m_originalLevel == targetLevelID` в хуке `LevelBrowserLayer::setupLevelBrowser`.
-   - Полное отсечение левых и поддельных копий: в выдаче браузера остаются только те уровни, которые являются прямыми копиями целевого уровня (защита от занерфленных фейков и несоответствующих уровней).
-
----
-
-## 3. Что планируется сделать (Roadmap / Идеи на будущее)
-
-1. **Публикация в официальный Geode Mod Index**:
-   - Оформить PR в репозиторий `geode-sdk/mods` для официального включения мода во внутриигровой каталог Geode, когда будет дана команда.
+1. Native button on `LevelInfoLayer` (left side menu) to search startpos levels in one click.
+2. RobTop API query length optimization (auto-trimming to 20 chars).
+3. Verified-First sorting: direct copies (`m_originalLevel == targetLevelID`) appear first.
+4. Clean verified badge next to level name for authentic copies.

@@ -1,0 +1,7 @@
+build/
+build-*/
+.cache/
+CMakeLists.txt.user
+*.geode
+*.dll
+*.pdb
