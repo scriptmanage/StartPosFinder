@@ -6,8 +6,7 @@
 
 using namespace geode::prelude;
 
-static int s_targetOriginalLevelID = 0;
-static bool s_isFilteringStartPos = false;
+static int s_currentTargetOriginalLevelID = 0;
 
 class $modify(MyLevelInfoLayer, LevelInfoLayer) {
     bool init(GJGameLevel* level, bool challenge) {
@@ -15,7 +14,7 @@ class $modify(MyLevelInfoLayer, LevelInfoLayer) {
             return false;
         }
 
-        if (!level || level->m_levelName.empty()) {
+        if (!level || level->m_levelName.empty() || level->m_levelID.value() <= 0) {
             return true;
         }
 
@@ -25,11 +24,22 @@ class $modify(MyLevelInfoLayer, LevelInfoLayer) {
         }
 
         auto buttonSprite = CircleButtonSprite::createWithSpriteFrameName(
-            "gj_findBtn_001.png",
-            0.85f,
+            "startpos_search.png"_spr,
+            1.0f,
             CircleBaseColor::Green,
             CircleBaseSize::Medium
         );
+        if (!buttonSprite) {
+            buttonSprite = CircleButtonSprite::createWithSpriteFrameName(
+                "edit_findBtn_001.png",
+                1.0f,
+                CircleBaseColor::Green,
+                CircleBaseSize::Medium
+            );
+        }
+        if (!buttonSprite) {
+            return true;
+        }
         buttonSprite->setScale(0.75f);
 
         auto btn = CCMenuItemSpriteExtra::create(
@@ -54,24 +64,52 @@ class $modify(MyLevelInfoLayer, LevelInfoLayer) {
     }
 
     void onFindStartPos(CCObject* sender) {
-        if (!m_level) {
+        if (!m_level || m_level->m_levelID.value() <= 0) {
             return;
         }
 
-        s_targetOriginalLevelID = m_level->m_levelID.value();
-        s_isFilteringStartPos = true;
+        int targetID = m_level->m_levelID.value();
+        if (m_level->m_originalLevel.value() > 0 && m_level->m_originalLevel.value() != m_level->m_levelID.value()) {
+            targetID = m_level->m_originalLevel.value();
+        }
+        s_currentTargetOriginalLevelID = targetID;
 
-        std::string levelName = m_level->m_levelName;
-        std::string target = levelName + " startpos";
-        std::string query;
+        std::string rawName = m_level->m_levelName;
+        std::string cleanName = rawName;
 
-        if (target.length() <= 20) {
-            query = target;
-        } else {
-            query = target.substr(0, 20);
-            while (!query.empty() && query.back() == ' ') {
-                query.pop_back();
+        auto toLower = [](std::string s) {
+            for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return s;
+        };
+
+        std::string lower = toLower(cleanName);
+        for (const std::string& suffix : {" startpos", " start pos", " copy", " start", " pos"}) {
+            if (lower.length() > suffix.length() && lower.ends_with(suffix)) {
+                cleanName = cleanName.substr(0, cleanName.length() - suffix.length());
+                lower = toLower(cleanName);
             }
+        }
+        while (!cleanName.empty() && cleanName.back() == ' ') {
+            cleanName.pop_back();
+        }
+        if (cleanName.empty()) {
+            cleanName = rawName;
+        }
+
+        std::string query = cleanName + " startpos";
+        if (query.length() > 20) {
+            size_t maxLen = 20 > 9 ? 20 - 9 : 0;
+            std::string trimmed = cleanName.substr(0, maxLen);
+            while (!trimmed.empty() && (static_cast<unsigned char>(trimmed.back()) & 0xC0) == 0x80) {
+                trimmed.pop_back();
+            }
+            if (!trimmed.empty() && (static_cast<unsigned char>(trimmed.back()) & 0x80) != 0) {
+                trimmed.pop_back();
+            }
+            while (!trimmed.empty() && trimmed.back() == ' ') {
+                trimmed.pop_back();
+            }
+            query = trimmed + " startpos";
         }
 
         auto searchObj = GJSearchObject::create(SearchType::Search, query);
@@ -81,26 +119,54 @@ class $modify(MyLevelInfoLayer, LevelInfoLayer) {
 };
 
 class $modify(MyLevelBrowserLayer, LevelBrowserLayer) {
+    struct Fields {
+        int m_targetOriginalLevelID = 0;
+    };
+
+    bool init(GJSearchObject* searchObj) {
+        if (!LevelBrowserLayer::init(searchObj)) {
+            return false;
+        }
+        m_fields->m_targetOriginalLevelID = s_currentTargetOriginalLevelID;
+        return true;
+    }
+
+    void onBack(CCObject* sender) {
+        if (m_fields->m_targetOriginalLevelID > 0 || s_currentTargetOriginalLevelID > 0) {
+            s_currentTargetOriginalLevelID = 0;
+            CCDirector::sharedDirector()->popSceneWithTransition(0.5f, PopTransition::kPopTransitionFade);
+            return;
+        }
+        LevelBrowserLayer::onBack(sender);
+    }
+
     void setupLevelBrowser(cocos2d::CCArray* levels) {
-        if (s_isFilteringStartPos && s_targetOriginalLevelID > 0 && levels) {
+        int targetID = m_fields->m_targetOriginalLevelID;
+        if (targetID <= 0) {
+            targetID = s_currentTargetOriginalLevelID;
+        }
+
+        if (targetID > 0 && levels) {
             auto verifiedLevels = cocos2d::CCArray::create();
             auto otherLevels = cocos2d::CCArray::create();
 
-            for (auto obj : CCArrayExt<GJGameLevel*>(levels)) {
-                if (!obj) continue;
+            for (auto rawObj : CCArrayExt<CCObject*>(levels)) {
+                if (!rawObj) continue;
 
-                if (obj->m_originalLevel.value() == s_targetOriginalLevelID) {
-                    verifiedLevels->addObject(obj);
-                } else {
-                    otherLevels->addObject(obj);
+                if (auto level = typeinfo_cast<GJGameLevel*>(rawObj)) {
+                    if (level->m_originalLevel.value() == targetID || level->m_levelID.value() == targetID) {
+                        verifiedLevels->addObject(level);
+                        continue;
+                    }
                 }
+                otherLevels->addObject(rawObj);
             }
 
-            auto sortedLevels = cocos2d::CCArray::create();
-            for (auto obj : CCArrayExt<GJGameLevel*>(verifiedLevels)) {
+            auto sortedLevels = cocos2d::CCArray::createWithCapacity(levels->count());
+            for (auto obj : CCArrayExt<CCObject*>(verifiedLevels)) {
                 sortedLevels->addObject(obj);
             }
-            for (auto obj : CCArrayExt<GJGameLevel*>(otherLevels)) {
+            for (auto obj : CCArrayExt<CCObject*>(otherLevels)) {
                 sortedLevels->addObject(obj);
             }
 
@@ -110,73 +176,79 @@ class $modify(MyLevelBrowserLayer, LevelBrowserLayer) {
 
         LevelBrowserLayer::setupLevelBrowser(levels);
     }
-
-    void destructor() {
-        s_isFilteringStartPos = false;
-        s_targetOriginalLevelID = 0;
-        LevelBrowserLayer::~LevelBrowserLayer();
-    }
 };
 
 class $modify(MyLevelCell, LevelCell) {
     void loadFromLevel(GJGameLevel* level) {
         LevelCell::loadFromLevel(level);
 
-        if (!s_isFilteringStartPos || s_targetOriginalLevelID <= 0 || !level || !m_mainLayer) {
-            return;
-        }
-
-        if (level->m_originalLevel.value() == s_targetOriginalLevelID) {
+        if (m_mainLayer) {
             if (auto existingBadge = m_mainLayer->getChildByID("verified-copy-badge"_spr)) {
                 existingBadge->removeFromParent();
             }
-
-            CCSprite* badge = CCSprite::create("startpos_verified.png"_spr);
-            if (!badge) {
-                badge = CCSprite::createWithSpriteFrameName("GJ_checkOn_001.png");
-            }
-
-            if (!badge) {
-                return;
-            }
-
-            badge->setID("verified-copy-badge"_spr);
-            badge->setScale(0.35f);
-
-            CCNode* titleNode = m_mainLayer->getChildByID("level-name-label");
-            if (!titleNode) {
-                titleNode = m_mainLayer->getChildByID("level-name");
-            }
-            if (!titleNode) {
-                for (auto child : CCArrayExt<CCNode*>(m_mainLayer->getChildren())) {
-                    if (auto bmFont = typeinfo_cast<CCLabelBMFont*>(child)) {
-                        if (bmFont->getPositionY() > 60.f && bmFont->getPositionX() < 100.f) {
-                            titleNode = bmFont;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (titleNode) {
-                float titleRight = titleNode->getPositionX() + (titleNode->getContentSize().width * titleNode->getScale());
-                float titleY = titleNode->getPositionY();
-
-                if (titleRight + 16.f < 275.f) {
-                    badge->setPosition(ccp(titleRight + 10.f, titleY));
-                } else {
-                    if (auto creatorNode = m_mainLayer->getChildByID("creator-name")) {
-                        float creatorRight = creatorNode->getPositionX() + (creatorNode->getContentSize().width * creatorNode->getScale());
-                        badge->setPosition(ccp(creatorRight + 10.f, creatorNode->getPositionY()));
-                    } else {
-                        badge->setPosition(ccp(38.f, 62.f));
-                    }
-                }
-            } else {
-                badge->setPosition(ccp(38.f, 62.f));
-            }
-
-            m_mainLayer->addChild(badge, 15);
         }
+
+        int targetID = s_currentTargetOriginalLevelID;
+        if (targetID <= 0 || !level || !m_mainLayer) {
+            return;
+        }
+
+        bool isVerified = (level->m_originalLevel.value() == targetID || level->m_levelID.value() == targetID);
+        if (!isVerified) {
+            return;
+        }
+
+        CCSprite* badge = CCSprite::createWithSpriteFrameName("startpos_verified.png"_spr);
+        if (!badge) {
+            badge = CCSprite::createWithSpriteFrameName("GJ_completesIcon_001.png");
+        }
+        if (!badge) {
+            return;
+        }
+
+        badge->setID("verified-copy-badge"_spr);
+        badge->setScale(0.32f);
+
+        CCNode* titleNode = m_mainLayer->getChildByID("level-name-label");
+        if (!titleNode) {
+            titleNode = m_mainLayer->getChildByID("level-name");
+        }
+        if (!titleNode) {
+            for (auto child : CCArrayExt<CCNode*>(m_mainLayer->getChildren())) {
+                if (auto bmFont = typeinfo_cast<CCLabelBMFont*>(child)) {
+                    if (bmFont->getPositionY() > 60.f && bmFont->getPositionX() < 100.f) {
+                        titleNode = bmFont;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (titleNode) {
+            float titleWidth = titleNode->getScaledContentSize().width;
+            float titleRight = titleNode->getPositionX() + titleWidth * (1.f - titleNode->getAnchorPoint().x);
+            float titleY = titleNode->getPositionY();
+
+            if (titleRight + 20.f < 280.f) {
+                badge->setPosition(ccp(titleRight + 8.f, titleY - 1.f));
+            } else {
+                CCNode* creatorNode = m_mainLayer->getChildByIDRecursive("creator-name");
+                if (!creatorNode) {
+                    creatorNode = m_mainLayer->getChildByID("creator-name");
+                }
+
+                if (creatorNode) {
+                    float creatorWidth = creatorNode->getScaledContentSize().width;
+                    float creatorRight = creatorNode->getPositionX() + creatorWidth * (1.f - creatorNode->getAnchorPoint().x);
+                    badge->setPosition(ccp(creatorRight + 12.f, creatorNode->getPositionY()));
+                } else {
+                    badge->setPosition(ccp(titleNode->getPositionX() + 15.f, titleY + 12.f));
+                }
+            }
+        } else {
+            badge->setPosition(ccp(55.f, 62.f));
+        }
+
+        m_mainLayer->addChild(badge, 15);
     }
 };

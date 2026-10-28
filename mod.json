@@ -11,9 +11,11 @@
     "developer": "scriptmanage",
     "description": "Find startpos and practice copies with Verified-First sorting and authenticity badges.",
     "resources": {
-        "sprites": [
-            "resources/*.png"
-        ]
+        "spritesheets": {
+            "startpos_sheet_v4": [
+                "resources/*-uhd.png"
+            ]
+        }
     },
     "links": {
         "source": "https://github.com/scriptmanage/StartPosFinder"

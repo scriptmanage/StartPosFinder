@@ -9,7 +9,7 @@ else()
 endif()
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
-project(StartPosFinder VERSION 1.0.0 LANGUAGES CXX)
+project(StartPosFinder VERSION 1.1.1 LANGUAGES CXX)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
 
